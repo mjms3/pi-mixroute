@@ -55,7 +55,7 @@ blocked routes that remain in the bundled snapshot.
 
 1. Confirm the destination `pi-packages` repository URL and read its current
    contribution rules. There are multiple unrelated repositories with that name.
-2. Verify ownership/existence of `github.com/maxs/pi-mixroute`, the npm package
+2. Verify ownership/existence of `github.com/mjms3/pi-mixroute`, the npm package
    name, and the metadata links. Initialize this package as its own Git
    repository before publishing it; `.github/workflows` must be at the repository
    root. Do not initialize Git in the parent directory containing sibling projects.

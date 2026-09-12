@@ -22,7 +22,7 @@ pi -e /absolute/path/to/pi-mixroute
 Once this repository/package has been published:
 
 ```bash
-pi install git:github.com/maxs/pi-mixroute
+pi install git:github.com/mjms3/pi-mixroute
 # Or, after the npm release:
 pi install npm:pi-mixroute
 ```
@@ -161,9 +161,9 @@ to `smoke-results/`. Results contain raw model output and errors; treat them as
 sensitive even though the supplied key is redacted. They are ignored by git and
 excluded from the npm package. Live smoke tests never run in GitHub Actions.
 
-See [CONTRIBUTING.md](https://github.com/maxs/pi-mixroute/blob/main/CONTRIBUTING.md)
+See [CONTRIBUTING.md](https://github.com/mjms3/pi-mixroute/blob/main/CONTRIBUTING.md)
 for development/release checks and
-[docs/REVIEW.md](https://github.com/maxs/pi-mixroute/blob/main/docs/REVIEW.md)
+[docs/REVIEW.md](https://github.com/mjms3/pi-mixroute/blob/main/docs/REVIEW.md)
 for the provider comparison and remaining checks.
 
 ## License and attribution

@@ -15,11 +15,11 @@
     ],
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/maxs/pi-mixroute.git"
+        "url": "git+https://github.com/mjms3/pi-mixroute.git"
     },
-    "homepage": "https://github.com/maxs/pi-mixroute#readme",
+    "homepage": "https://github.com/mjms3/pi-mixroute#readme",
     "bugs": {
-        "url": "https://github.com/maxs/pi-mixroute/issues"
+        "url": "https://github.com/mjms3/pi-mixroute/issues"
     },
     "engines": {
         "node": ">=22.19.0"
