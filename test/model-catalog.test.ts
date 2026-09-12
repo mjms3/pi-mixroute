@@ -88,6 +88,23 @@ test("normalization and dated variant metadata fallback preserve the requested i
     assert.equal(result.contextWindow, 1000000);
 });
 
+test("known MixRoute capability corrections override conflicting public metadata", () => {
+    const result = map(
+        { data: [{ id: "DeepSeek_V4_Flash" }, { id: "deepseek-v4-flash-vision-exp" }] },
+        {
+            deepseek: {
+                models: {
+                    "deepseek-v4-flash": { modalities: { input: ["text", "image"] } },
+                    "deepseek-v4-flash-vision-exp": { modalities: { input: ["text", "image"] } },
+                },
+            },
+        },
+        {},
+    );
+    assert.deepEqual(result.find((m) => m.id === "DeepSeek_V4_Flash")?.input, ["text"]);
+    assert.deepEqual(result.find((m) => m.id === "deepseek-v4-flash-vision-exp")?.input, ["text", "image"]);
+});
+
 test("OpenRouter pricing, legacy image modalities and reasoning are used without vendor metadata", () => {
     const result = map(
         { data: [{ id: "example" }] },

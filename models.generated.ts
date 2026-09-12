@@ -391,8 +391,7 @@ export const MIXROUTE_MODELS: MixRouteProviderModel[] = [
         "name": "DeepSeek V4 Flash",
         "reasoning": true,
         "input": [
-            "text",
-            "image"
+            "text"
         ],
         "cost": {
             "input": 0.15,

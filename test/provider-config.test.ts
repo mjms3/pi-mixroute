@@ -71,6 +71,16 @@ test("legacy and unknown Claude models do not advertise unverified adaptive leve
     }
 });
 
+test("known overrides correct stale bundled and cached metadata at registration", () => {
+    const stale = model("deepseek-v4-flash", { input: ["text", "image"] });
+    const config = createMixRouteProviderConfig([stale]);
+    assert.deepEqual(config.models[0]!.input, ["text"]);
+    assert.deepEqual(stale.input, ["text", "image"]);
+    const vision = createMixRouteProviderConfig([model("deepseek-v4-flash-vision-exp", { input: ["text", "image"] })])
+        .models[0]!;
+    assert.deepEqual(vision.input, ["text", "image"]);
+});
+
 test("output limits are capped without mutating the source snapshot", () => {
     const original = model();
     assert.equal(createMixRouteProviderConfig([original]).models[0]!.maxTokens, 32768);

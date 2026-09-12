@@ -102,10 +102,14 @@ on the account or change upstream. A likely compatibility fix alone does not rem
 an entry; retest a tool round-trip first.
 
 Metadata is **estimated**, not a guarantee of MixRoute's limits, capabilities, or
-billing. Unknown models default to a 131072-token context window and 4096 output
-tokens. Declared output is capped at 32768 and at the context window to leave some
-headroom for prompt-estimation errors. These guesses can still cause upstream
-errors; override inaccurate metadata in pi's `models.json`.
+billing. Public-catalog metadata known to differ from MixRoute is corrected by the
+narrow, evidence-based table in `known-model-overrides.ts`; these corrections are
+applied to live discovery, old caches, and the bundled snapshot. In particular,
+`deepseek-v4-flash` is text-only (the separate `deepseek-v4-flash-vision-exp` route
+retains image input). Unknown models default to a 131072-token context window and
+4096 output tokens. Declared output is capped at 32768 and at the context window to
+leave some headroom for prompt-estimation errors. These guesses can still cause
+upstream errors; override inaccurate metadata in pi's `models.json`.
 
 ## Troubleshooting
 

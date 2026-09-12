@@ -17,6 +17,7 @@ const expected = [
     "package.json",
     "index.ts",
     "catalog-validation.ts",
+    "known-model-overrides.ts",
     "model-catalog.ts",
     "model-loader.ts",
     "model-policy.ts",

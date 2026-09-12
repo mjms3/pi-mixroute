@@ -9,6 +9,7 @@
  */
 
 import type { ProviderConfig } from "@earendil-works/pi-coding-agent";
+import { applyKnownModelOverrides } from "./known-model-overrides.ts";
 
 export const BASE_URL = "https://api.mixroute.ai/v1";
 // pi's Anthropic client appends /v1/messages itself, so those models must not carry /v1.
@@ -133,7 +134,10 @@ export function createMixRouteProviderConfig(models: MixRouteProviderModel[]) {
         api: "openai-completions" as const,
         apiKey: PROVIDER_API_KEY_ENV,
         authHeader: true,
-        models: models.map((m) => {
+        models: models.map((discoveredModel) => {
+            // Apply again at registration so old caches and the bundled snapshot
+            // receive corrections immediately, without requiring a refresh.
+            const m = applyKnownModelOverrides(discoveredModel);
             const api = selectApi(m.id, m.api);
             const thinkingLevelMap = api === "anthropic-messages" ? resolveClaudeThinkingLevelMap(m.id) : undefined;
             return {

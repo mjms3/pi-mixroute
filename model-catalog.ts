@@ -10,6 +10,7 @@
  * uses `anthropic/claude-opus-4.5` / `minimax/minimax-m2.5`.
  */
 
+import { applyKnownModelOverrides } from "./known-model-overrides.ts";
 import { isUnsupportedMixRouteModel } from "./model-policy.ts";
 import type { MixRouteProviderModel } from "./provider-config.ts";
 
@@ -265,7 +266,7 @@ export function mapMixRouteCatalogToProviderModels(
                 }
             }
 
-            return {
+            return applyKnownModelOverrides({
                 id: model.id,
                 name: baseName
                     ? strippedSuffix
@@ -323,7 +324,7 @@ export function mapMixRouteCatalogToProviderModels(
                         openRouterModel?.top_provider?.max_completion_tokens,
                         cached?.maxTokens,
                     ) ?? DEFAULT_MAX_TOKENS,
-            };
+            });
         })
         .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
