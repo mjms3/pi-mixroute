@@ -1,0 +1,96 @@
+{
+    "name": "pi-mixroute",
+    "version": "1.0.0",
+    "description": "MixRoute provider extension for pi — dynamic model discovery with models.dev/OpenRouter metadata enrichment",
+    "type": "module",
+    "license": "MIT",
+    "keywords": [
+        "pi",
+        "pi-package",
+        "pi-extension",
+        "pi-provider",
+        "mixroute",
+        "llm",
+        "ai"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/maxs/pi-mixroute.git"
+    },
+    "homepage": "https://github.com/maxs/pi-mixroute#readme",
+    "bugs": {
+        "url": "https://github.com/maxs/pi-mixroute/issues"
+    },
+    "engines": {
+        "node": ">=22.19.0"
+    },
+    "files": [
+        "index.ts",
+        "catalog-validation.ts",
+        "model-catalog.ts",
+        "model-loader.ts",
+        "model-policy.ts",
+        "models.generated.ts",
+        "provider-config.ts",
+        "README.md",
+        "LICENSE",
+        "NOTICE"
+    ],
+    "scripts": {
+        "typecheck": "tsc --noEmit",
+        "generate": "tsx scripts/generate-models.ts",
+        "smoke": "tsx scripts/smoke-models.ts",
+        "lint": "biome check --error-on-warnings .",
+        "format": "biome check --write .",
+        "test": "tsx --test test/*.test.ts",
+        "test:coverage": "c8 tsx --test test/*.test.ts",
+        "check:package": "tsx scripts/check-package.ts",
+        "check": "npm run lint && npm run typecheck && npm run test:coverage && npm run check:package",
+        "prepublishOnly": "npm run check"
+    },
+    "pi": {
+        "extensions": [
+            "./index.ts"
+        ]
+    },
+    "peerDependencies": {
+        "@earendil-works/pi-ai": "*",
+        "@earendil-works/pi-coding-agent": "*"
+    },
+    "peerDependenciesMeta": {
+        "@earendil-works/pi-ai": {
+            "optional": true
+        },
+        "@earendil-works/pi-coding-agent": {
+            "optional": true
+        }
+    },
+    "c8": {
+        "all": true,
+        "include": [
+            "index.ts",
+            "catalog-validation.ts",
+            "model-catalog.ts",
+            "model-loader.ts",
+            "model-policy.ts",
+            "provider-config.ts"
+        ],
+        "reporter": [
+            "text",
+            "lcov"
+        ],
+        "check-coverage": true,
+        "lines": 90,
+        "functions": 90,
+        "branches": 80
+    },
+    "devDependencies": {
+        "@biomejs/biome": "^2.5.13",
+        "@earendil-works/pi-ai": "0.85.1",
+        "@earendil-works/pi-coding-agent": "0.85.1",
+        "@types/node": "^24.0.0",
+        "c8": "^12.0.0",
+        "tsx": "^4.20.0",
+        "typescript": "^5.8.0"
+    }
+}

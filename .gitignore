@@ -1,0 +1,10 @@
+node_modules/
+coverage/
+smoke-results/
+scripts/.generate-cache.json
+*.tgz
+*.tmp
+.env
+.env.*
+!.env.example
+.DS_Store

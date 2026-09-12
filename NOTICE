@@ -1,0 +1,11 @@
+pi-mixroute includes code adapted from pi-tokenrouter:
+https://github.com/liaowang11/pi-tokenrouter
+Copyright (c) 2025 Bill Liao
+Licensed under the MIT License reproduced in LICENSE.
+
+The provider lifecycle, model discovery/cache, catalog enrichment, and Claude
+compatibility logic were adapted for MixRoute and subsequently modified.
+
+Model metadata is obtained from MixRoute, models.dev, and OpenRouter. Prices
+and capabilities are estimates, not a guarantee of MixRoute availability or billing.
+This project is not affiliated with or endorsed by these services.
