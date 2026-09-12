@@ -54,7 +54,7 @@ migration is not required for a valid pi package and is not claimed here.
 - The validators also accepted fresh public metadata responses: **213 models.dev
   providers** and **445 OpenRouter models**. These were read-only, unauthenticated
   catalog requests, not model inference.
-- GitHub Actions has not run remotely yet; macOS verification remains a CI task.
+- GitHub Actions has not run remotely yet.
 
 ## Remaining checks / intentional limitations
 
@@ -70,7 +70,7 @@ migration is not required for a valid pi package and is not claimed here.
 - The optional smoke proves a harmless tool round-trip only. It does not establish
   image support, long-context accuracy, all built-in tool schemas, every thinking
   level, or provider-wide availability. Catalog metadata and prices are estimates.
-- CI is configured for Linux and macOS. Windows behavior has not been validated;
+- CI is configured for Linux only. macOS and Windows behavior has not been validated;
   package-development checks require a `tar` executable.
 - The package check intentionally uses the pinned pi CLI's shipped entrypoint;
   update the check if pi changes its distribution layout. pi itself supplies the

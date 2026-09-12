@@ -23,7 +23,7 @@ npm run check
 - `npm run check:package`: builds an actual npm tarball with lifecycle scripts
   disabled, checks its file/import allowlist, extracts it outside the checkout,
   and invokes pi's CLI with isolated configuration and a fake key. Also runs a
-  missing-entrypoint negative control. Requires `tar` (Linux/macOS CI supplies it).
+  missing-entrypoint negative control. Requires `tar` (the Linux CI runner supplies it).
 - `npm run format`: formatting and safe Biome fixes. Generated data and lockfiles
   are not reformatted.
 
@@ -63,7 +63,7 @@ blocked routes that remain in the bundled snapshot.
    file allowlist. Confirm any metadata redistribution obligations with the
    catalog services; upstream metadata is not a promise of MixRoute pricing.
 4. Run a clean `npm ci --ignore-scripts`, `npm run check`, and `npm audit`.
-   Require the Node 22.19.0/24 Linux and Node 24 macOS CI jobs to pass.
+   Require the Node 22.19.0 and Node 24 Linux CI jobs to pass.
 5. With explicit budget approval, regenerate the snapshot and run a small live
    smoke for each transport. Check login and model selection in pi manually.
    Expand to a whole-catalog smoke only when its cost is acceptable.

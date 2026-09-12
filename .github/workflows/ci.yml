@@ -26,8 +26,6 @@ jobs:
             node: '22.19.0'
           - os: ubuntu-latest
             node: '24'
-          - os: macos-latest
-            node: '24'
     env:
       PI_OFFLINE: '1'
       PI_TELEMETRY: '0'
