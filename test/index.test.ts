@@ -40,6 +40,9 @@ async function harness(t: TestContext, offline = false, hasUI = true) {
             notify: (message: string, level: string) => {
                 notifications.push({ message, level });
             },
+            setStatus: (_key: string, _text: string | undefined) => {
+                // no-op in tests; budget status is a UI-only concern
+            },
         },
     } as unknown as ExtensionCommandContext;
     const pi = {

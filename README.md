@@ -53,6 +53,41 @@ After first login, run `/mixroute-refresh` to discover account-specific models.
 Existing `mixroute` entries in `models.json` compose above this extension and take
 precedence for models they define.
 
+## Budget tracking (optional)
+
+When you select a MixRoute model, the extension shows your remaining account
+balance in pi's footer, colour-coded:
+
+| Balance        | Colour |
+|----------------|--------|
+| ≥ $40          | 🟢 green |
+| $20 – $40      | 🟠 orange |
+| < $20          | 🔴 red |
+
+The MixRoute OpenAI-compatible API does not return financial budget data.
+The balance is fetched from MixRoute's One API admin panel and requires an
+**admin access token** and your **user ID**. To set it up:
+
+1. Log into [api.mixroute.ai](https://api.mixroute.ai) in your browser
+2. Open DevTools → Application → Local Storage → copy the `access_token` value
+3. Open DevTools → Application → Local Storage → copy the `uid` value (your user ID)
+4. Add both to your auth.json entry:
+
+```json
+{
+  "mixroute": {
+    "type": "api_key",
+    "key": "sk-...",
+    "adminToken": "your-access-token",
+    "userId": 1234
+  }
+}
+```
+
+Restart pi and select a MixRoute model. The balance appears in the footer.
+If the credentials are missing or the API call fails, nothing is shown.
+Use `/mixroute-budget` for the full breakdown (balance + rate-limit usage).
+
 ## Catalog discovery and offline behavior
 
 - The extension registers the disk cache, or a bundled snapshot, before startup
