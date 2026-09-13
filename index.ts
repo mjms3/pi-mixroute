@@ -74,11 +74,7 @@ function parseDecimalHeader(headers: Record<string, string>, key: string): numbe
 
 /** Compact number formatting: 1234 → "1.2K", 1234567 → "1.2M" */
 function compact(n: number): string {
-    return n >= 1_000_000
-        ? `${(n / 1_000_000).toFixed(1)}M`
-        : n >= 1_000
-          ? `${(n / 1_000).toFixed(1)}K`
-          : n.toFixed(0);
+    return n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}K` : n.toFixed(0);
 }
 
 /**
@@ -107,10 +103,7 @@ async function readAdminCredentials(): Promise<AdminCredentials | null> {
  * Fetch the user's remaining quota from the One API admin endpoint.
  * Returns the balance in USD, or null on failure.
  */
-async function fetchAdminBalance(
-    credentials: AdminCredentials,
-    signal?: AbortSignal,
-): Promise<number | null> {
+async function fetchAdminBalance(credentials: AdminCredentials, signal?: AbortSignal): Promise<number | null> {
     try {
         const res = await fetch("https://api.mixroute.ai/api/user/self", {
             headers: {
@@ -183,7 +176,12 @@ export default async function (pi: ExtensionAPI) {
     credentials = await readAdminCredentials();
 
     /** Re-fetch the admin balance and update the status bar. */
-    async function refreshAdminBalance(ctx: { ui: { setStatus: (key: string, text: string | undefined) => void; theme?: { fg: (color: ThemeColor, text: string) => string } } }): Promise<void> {
+    async function refreshAdminBalance(ctx: {
+        ui: {
+            setStatus: (key: string, text: string | undefined) => void;
+            theme?: { fg: (color: ThemeColor, text: string) => string };
+        };
+    }): Promise<void> {
         if (!credentials) {
             ctx.ui.setStatus(STATUS_KEY, undefined);
             return;
@@ -195,17 +193,18 @@ export default async function (pi: ExtensionAPI) {
     }
 
     /** Update the status bar with the current admin balance, colour-coded. */
-    function updateBudgetStatus(ctx: { ui: { setStatus: (key: string, text: string | undefined) => void; theme?: { fg: (color: ThemeColor, text: string) => string } } }): void {
+    function updateBudgetStatus(ctx: {
+        ui: {
+            setStatus: (key: string, text: string | undefined) => void;
+            theme?: { fg: (color: ThemeColor, text: string) => string };
+        };
+    }): void {
         if (adminBalance === null || !mixrouteActive) {
             ctx.ui.setStatus(STATUS_KEY, undefined);
             return;
         }
         const color: ThemeColor =
-            adminBalance >= GREEN_THRESHOLD
-                ? "success"
-                : adminBalance >= AMBER_THRESHOLD
-                  ? "warning"
-                  : "error";
+            adminBalance >= GREEN_THRESHOLD ? "success" : adminBalance >= AMBER_THRESHOLD ? "warning" : "error";
         const label = `$${adminBalance.toFixed(2)}`;
         const theme = ctx.ui.theme;
         if (!theme) {
