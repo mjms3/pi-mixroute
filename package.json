@@ -1,6 +1,6 @@
 {
     "name": "pi-mixroute",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "description": "MixRoute provider extension for pi — dynamic model discovery with models.dev/OpenRouter metadata enrichment",
     "type": "module",
     "license": "MIT",

@@ -26,9 +26,12 @@ const expected = [
 ].sort();
 const directory = await mkdtemp(join(tmpdir(), "pi-mixroute-package-"));
 try {
-    const { stdout } = await exec("npm", ["pack", "--json", "--ignore-scripts", "--pack-destination", directory], {
-        cwd: root,
-    });
+    const { stdout } = await exec(
+        // --dry-run=false: overrides npm_config_dry_run inherited from an outer `npm publish --dry-run`
+        "npm",
+        ["pack", "--json", "--ignore-scripts", "--dry-run=false", "--pack-destination", directory],
+        { cwd: root },
+    );
     const packed = JSON.parse(stdout) as { filename: string; files: { path: string }[] }[];
     assert.equal(packed.length, 1);
     assert.deepEqual(packed[0]!.files.map((file) => file.path).sort(), expected, "Unexpected package contents");
