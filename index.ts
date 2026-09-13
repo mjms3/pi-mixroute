@@ -192,7 +192,9 @@ export default async function (pi: ExtensionAPI) {
         updateBudgetStatus(ctx);
     }
 
-    /** Update the status bar with the current admin balance, colour-coded. */
+    /** Update the status bar with the current admin balance, colour-coded.
+     * Uses explicit ANSI colors (green/amber/red) independent of theme.
+     */
     function updateBudgetStatus(ctx: {
         ui: {
             setStatus: (key: string, text: string | undefined) => void;
@@ -203,15 +205,11 @@ export default async function (pi: ExtensionAPI) {
             ctx.ui.setStatus(STATUS_KEY, undefined);
             return;
         }
-        const color: ThemeColor =
-            adminBalance >= GREEN_THRESHOLD ? "success" : adminBalance >= AMBER_THRESHOLD ? "warning" : "error";
+        // ANSI 256-color codes: green (28), amber/orange (214), red (196)
+        const ansiColor = adminBalance >= GREEN_THRESHOLD ? 28 : adminBalance >= AMBER_THRESHOLD ? 214 : 196;
         const label = `$${adminBalance.toFixed(2)}`;
-        const theme = ctx.ui.theme;
-        if (!theme) {
-            ctx.ui.setStatus(STATUS_KEY, label);
-            return;
-        }
-        ctx.ui.setStatus(STATUS_KEY, theme.fg(color, `◉ ${label}`));
+        // Use raw ANSI escape sequence for theme-independent colors
+        ctx.ui.setStatus(STATUS_KEY, `\x1b[38;5;${ansiColor}m◉ ${label}\x1b[0m`);
     }
 
     // Session start: reset state, refresh model catalog in background.
