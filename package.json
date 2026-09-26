@@ -88,8 +88,8 @@
     },
     "devDependencies": {
         "@biomejs/biome": "^2.5.13",
-        "@earendil-works/pi-ai": "0.85.1",
-        "@earendil-works/pi-coding-agent": "0.85.1",
+        "@earendil-works/pi-ai": "0.87.1",
+        "@earendil-works/pi-coding-agent": "0.87.1",
         "@types/node": "^24.0.0",
         "c8": "^12.0.0",
         "tsx": "^4.20.0",
