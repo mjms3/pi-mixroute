@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import ts from "typescript";
+import { createScanner, SyntaxKind } from "typescript/unstable/ast";
 
 const exec = promisify(execFile);
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -24,6 +24,33 @@ const expected = [
     "models.generated.ts",
     "provider-config.ts",
 ].sort();
+function getStaticImports(source: string): string[] {
+    const scanner = createScanner(true, undefined, source);
+    const imports: string[] = [];
+    for (let token = scanner.scan(); token !== SyntaxKind.EndOfFile; token = scanner.scan()) {
+        if (token !== SyntaxKind.ImportKeyword) continue;
+        token = scanner.scan();
+        // Side-effect imports: import "./module";
+        if (token === SyntaxKind.StringLiteral) {
+            imports.push(scanner.getTokenValue());
+            continue;
+        }
+        // Dynamic imports and import.meta are expressions, not declarations.
+        if (token === SyntaxKind.OpenParenToken || token === SyntaxKind.DotToken) continue;
+        // Named/default/type imports end with `from "module"`.
+        while (token !== SyntaxKind.EndOfFile && token !== SyntaxKind.SemicolonToken) {
+            if (token === SyntaxKind.FromKeyword) {
+                token = scanner.scan();
+                assert.equal(token, SyntaxKind.StringLiteral, "Import declaration is missing a module specifier");
+                imports.push(scanner.getTokenValue());
+                break;
+            }
+            token = scanner.scan();
+        }
+    }
+    return imports;
+}
+
 const directory = await mkdtemp(join(tmpdir(), "pi-mixroute-package-"));
 try {
     const { stdout } = await exec(
@@ -57,10 +84,7 @@ try {
     for (const hook of ["preinstall", "install", "postinstall", "prepare"])
         assert.equal(manifest.scripts[hook], undefined);
     for (const file of expected.filter((name) => name.endsWith(".ts"))) {
-        const source = ts.createSourceFile(file, await readFile(join(installed, file), "utf8"), ts.ScriptTarget.Latest);
-        for (const statement of source.statements) {
-            if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
-            const specifier = statement.moduleSpecifier.text;
+        for (const specifier of getStaticImports(await readFile(join(installed, file), "utf8"))) {
             if (specifier.startsWith("./"))
                 assert.ok(expected.includes(specifier.slice(2)), `${file} imports unpacked ${specifier}`);
             else
