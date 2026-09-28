@@ -11,22 +11,27 @@
  * Budget tracking
  * ---------------
  * MixRoute's OpenAI-compatible API does not return financial budget on every
- * response.  The actual remaining balance is available via MixRoute's One API
- * admin endpoint:
+ * response.  The actual remaining balance is available via MixRoute's user
+ * endpoint:
  *
  *   GET /api/user/self  →  { quota, used_quota, ... }
  *
- * This requires an admin access token (obtained by logging into the MixRoute
- * website) plus the numeric user ID.  Set both in auth.json:
+ * Authentication uses a system access key, an officially supported credential
+ * generated under Settings → System access key on the MixRoute website.  Set it
+ * in auth.json:
  *
  *   "mixroute": {
  *     "type": "api_key",
  *     "key": "sk-...",
- *     "adminToken": "your-admin-access-token",
- *     "userId": 1234
+ *     "systemAccessKey": "your-system-access-key"
  *   }
  *
- * When these are present the extension shows the remaining balance in the
+ * (The deprecated "adminToken" browser session token, with its numeric
+ * "userId", still works for existing configs but will be removed in a future
+ * release; users are warned at session start to switch to a system access
+ * key.)
+ *
+ * When the key is present the extension shows the remaining balance in the
  * footer, colour-coded (defaults; see budgetThresholds below):
  *   🟢 green   ≥ $40 remaining
  *   🟠 orange  $20–$40 remaining
@@ -64,12 +69,14 @@ import { MIXROUTE_MODELS } from "./models.generated.ts";
 import { createMixRouteProviderConfig, PROVIDER_NAME } from "./provider-config.ts";
 
 // ---------------------------------------------------------------------------
-// Budget tracking via One API admin endpoint
+// Budget tracking via /api/user/self
 // ---------------------------------------------------------------------------
 //
-// MixRoute runs a One API admin panel.  When you log into
-// https://api.mixroute.ai you receive an admin access token.  Store it
-// alongside your API key in auth.json together with your numeric user ID.
+// Authenticate with a system access key (Settings → System access key on
+// https://api.mixroute.ai), stored alongside your API key in auth.json as
+// "systemAccessKey".  The "adminToken" browser session token with a numeric
+// "userId" is DEPRECATED (removal planned); a session-start warning asks
+// users still on it to switch.
 //
 //   GET /api/user/self  →  { quota, used_quota, ... }
 //
@@ -174,46 +181,59 @@ function compact(n: number): string {
 }
 
 /**
- * Read admin credentials from auth.json.
- * Returns { adminToken, userId } or null if either is missing.
+ * Read budget credentials from auth.json.
+ * Returns { key, userId? } or null if no key is configured.
  */
-type AdminCredentials = { adminToken: string; userId: number };
+type BudgetCredentials = {
+    key: string;
+    /** Only needed by the deprecated session-token flow. */
+    userId?: number;
+    /** True when the deprecated "adminToken" browser session token is used. */
+    legacy: boolean;
+};
 
 /**
- * Read admin credentials from the extension's auth.json entry.
- * Returns { adminToken, userId } or null if either is missing or invalid.
+ * Read budget credentials from the extension's auth.json entry.
+ * Returns { key, userId?, legacy } or null if no key is configured or the
+ * entry is invalid.
  */
-async function readAdminCredentials(): Promise<AdminCredentials | null> {
+async function readBudgetCredentials(): Promise<BudgetCredentials | null> {
     try {
         const authPath = join(getAgentDir(), "auth.json");
         const raw = await readFile(authPath, "utf8");
         const auth = JSON.parse(raw) as Record<string, unknown>;
         const entry = auth[PROVIDER_NAME] as Record<string, unknown> | undefined;
         if (!entry) return null;
-        const adminToken = entry.adminToken;
+        // Prefer the officially supported system access key. The "adminToken"
+        // browser session token is DEPRECATED and will be removed in a future
+        // release; it remains only as a fallback for existing configs.
+        const systemKey = typeof entry.systemAccessKey === "string" ? entry.systemAccessKey.trim() : "";
+        const adminToken = typeof entry.adminToken === "string" ? entry.adminToken.trim() : "";
+        const key = systemKey || adminToken;
+        if (!key) return null;
+        const credentials: BudgetCredentials = { key, legacy: !systemKey };
         const userId = entry.userId;
-        if (typeof adminToken !== "string" || !adminToken.trim()) return null;
-        if (typeof userId !== "number" || !Number.isSafeInteger(userId) || userId <= 0) return null;
-        return { adminToken: adminToken.trim(), userId };
+        if (typeof userId === "number" && Number.isSafeInteger(userId) && userId > 0) credentials.userId = userId;
+        return credentials;
     } catch {
         return null;
     }
 }
 
 /**
- * Fetch the user's remaining quota from the One API admin endpoint.
+ * Fetch the user's remaining quota from the /api/user/self endpoint.
  * Returns the balance in USD, or null on failure.
  */
-async function fetchAdminBalance(credentials: AdminCredentials, signal?: AbortSignal): Promise<number | null> {
+async function fetchBudgetBalance(credentials: BudgetCredentials, signal?: AbortSignal): Promise<number | null> {
     try {
-        const res = await fetch("https://api.mixroute.ai/api/user/self", {
-            headers: {
-                authorization: `Bearer ${credentials.adminToken}`,
-                "New-Api-User": String(credentials.userId),
-                accept: "application/json",
-            },
-            signal,
-        });
+        const headers: Record<string, string> = {
+            authorization: `Bearer ${credentials.key}`,
+            accept: "application/json",
+        };
+        // Deprecated session tokens also need the numeric user ID header;
+        // system access keys identify the user on their own.
+        if (credentials.userId !== undefined) headers["New-Api-User"] = String(credentials.userId);
+        const res = await fetch("https://api.mixroute.ai/api/user/self", { headers, signal });
         if (!res.ok) return null;
         const body = (await res.json()) as { success?: boolean; data?: { quota?: number } };
         if (!body.success || !body.data || typeof body.data.quota !== "number") return null;
@@ -270,14 +290,14 @@ export default async function (pi: ExtensionAPI) {
 
     let startupRefreshTriggered = false;
     let mixrouteActive = false;
-    let adminBalance: number | null = null; // USD, or null if unavailable
+    let budgetBalance: number | null = null; // USD, or null if unavailable
     let thresholds: BudgetThresholds = { green: DEFAULT_GREEN_THRESHOLD, amber: DEFAULT_AMBER_THRESHOLD };
 
-    // Read admin credentials once at startup (auth.json rarely changes).
-    const credentials = await readAdminCredentials();
+    // Read budget credentials once at startup (auth.json rarely changes).
+    const credentials = await readBudgetCredentials();
 
-    /** Re-fetch the admin balance and update the status bar. */
-    async function refreshAdminBalance(ctx: {
+    /** Re-fetch the balance and update the status bar. */
+    async function refreshBudgetBalance(ctx: {
         ui: {
             setStatus: (key: string, text: string | undefined) => void;
             theme?: { fg: (color: ThemeColor, text: string) => string };
@@ -287,13 +307,13 @@ export default async function (pi: ExtensionAPI) {
             ctx.ui.setStatus(STATUS_KEY, undefined);
             return;
         }
-        const balance = await fetchAdminBalance(credentials, lifetime.signal);
+        const balance = await fetchBudgetBalance(credentials, lifetime.signal);
         if (lifetime.signal.aborted) return;
-        adminBalance = balance;
+        budgetBalance = balance;
         updateBudgetStatus(ctx);
     }
 
-    /** Update the status bar with the current admin balance, colour-coded.
+    /** Update the status bar with the current balance, colour-coded.
      * Uses explicit ANSI colors (green/amber/red) independent of theme.
      */
     function updateBudgetStatus(ctx: {
@@ -302,26 +322,37 @@ export default async function (pi: ExtensionAPI) {
             theme?: { fg: (color: ThemeColor, text: string) => string };
         };
     }): void {
-        if (adminBalance === null || !mixrouteActive) {
+        if (budgetBalance === null || !mixrouteActive) {
             ctx.ui.setStatus(STATUS_KEY, undefined);
             return;
         }
         // ANSI 256-color codes: green (28), amber/orange (214), red (196)
-        const ansiColor = adminBalance >= thresholds.green ? 28 : adminBalance >= thresholds.amber ? 214 : 196;
-        const label = `$${adminBalance.toFixed(2)}`;
+        const ansiColor = budgetBalance >= thresholds.green ? 28 : budgetBalance >= thresholds.amber ? 214 : 196;
+        const label = `$${budgetBalance.toFixed(2)}`;
         // Use raw ANSI escape sequence for theme-independent colors
         ctx.ui.setStatus(STATUS_KEY, `\x1b[38;5;${ansiColor}m◉ ${label}\x1b[0m`);
     }
 
     // Session start: reset state, resolve budget thresholds from settings,
-    // refresh model catalog in background.
+    // warn about deprecated budget credentials, refresh model catalog in
+    // background.
+    let legacyWarningShown = false;
     pi.on("session_start", (_event, ctx) => {
         mixrouteActive = false;
-        adminBalance = null;
+        budgetBalance = null;
         rlTokensRemaining = null;
         rlTokensLimit = null;
         thresholds = resolveThresholds(ctx);
         ctx.ui.setStatus(STATUS_KEY, undefined);
+
+        if (credentials?.legacy && !legacyWarningShown) {
+            legacyWarningShown = true;
+            const message =
+                "MixRoute: the adminToken/userId auth.json config (browser session token) is deprecated and will be removed in a future release. " +
+                "Generate a system access key under Settings → System access key on the MixRoute website and set it as systemAccessKey in auth.json.";
+            if (ctx.hasUI) ctx.ui.notify(message, "warning");
+            else console.warn(`[mixroute] ${message}`);
+        }
 
         if (startupRefreshTriggered || process.env.PI_OFFLINE === "1") return;
         startupRefreshTriggered = true;
@@ -338,7 +369,7 @@ export default async function (pi: ExtensionAPI) {
         );
     });
 
-    // When the user picks a MixRoute model, fetch the admin balance.
+    // When the user picks a MixRoute model, fetch the balance.
     pi.on("model_select", async (_event, ctx) => {
         mixrouteActive = _event.model.provider === PROVIDER_NAME;
         if (!mixrouteActive) {
@@ -346,12 +377,12 @@ export default async function (pi: ExtensionAPI) {
             return;
         }
         if (credentials) {
-            await refreshAdminBalance(ctx);
+            await refreshBudgetBalance(ctx);
         }
     });
 
     // After every MixRoute response: track rate-limit tokens and refresh the
-    // admin balance so the footer stays up to date.
+    // balance so the footer stays up to date.
     let balanceRefreshInFlight = false;
     pi.on("after_provider_response", (event, ctx) => {
         if (!mixrouteActive) return;
@@ -362,14 +393,14 @@ export default async function (pi: ExtensionAPI) {
         if (remaining !== null) rlTokensRemaining = remaining;
         if (limit !== null) rlTokensLimit = limit;
 
-        // Refresh the admin balance (fire-and-forget, no concurrency).
+        // Refresh the balance (fire-and-forget, no concurrency).
         // Each request consumes quota so the balance changes every time.
         if (credentials && !balanceRefreshInFlight) {
             balanceRefreshInFlight = true;
-            fetchAdminBalance(credentials, lifetime.signal)
+            fetchBudgetBalance(credentials, lifetime.signal)
                 .then((balance) => {
                     if (!lifetime.signal.aborted && balance !== null) {
-                        adminBalance = balance;
+                        budgetBalance = balance;
                         updateBudgetStatus(ctx);
                     }
                 })
@@ -384,8 +415,8 @@ export default async function (pi: ExtensionAPI) {
         description: "Show MixRoute remaining balance and usage details",
         handler: async (_args, ctx) => {
             const parts: string[] = [];
-            if (adminBalance !== null) {
-                parts.push(`$${adminBalance.toFixed(2)} remaining`);
+            if (budgetBalance !== null) {
+                parts.push(`$${budgetBalance.toFixed(2)} remaining`);
             }
             if (rlTokensRemaining !== null && rlTokensLimit !== null) {
                 const pct = ((rlTokensRemaining / rlTokensLimit) * 100).toFixed(1);
@@ -394,7 +425,7 @@ export default async function (pi: ExtensionAPI) {
             if (parts.length === 0) {
                 const msg = credentials
                     ? "No MixRoute balance data yet. Send a message first."
-                    : "No admin credentials configured. Add adminToken and userId to auth.json.";
+                    : "No MixRoute system access key configured. Generate one under Settings → System access key on the MixRoute website and add it to auth.json.";
                 if (ctx.hasUI) ctx.ui.notify(msg, "info");
                 else console.warn(`[mixroute] ${msg}`);
                 return;

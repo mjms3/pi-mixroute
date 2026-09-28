@@ -65,27 +65,32 @@ balance in pi's footer, colour-coded (default thresholds):
 | < $20          | 🔴 red |
 
 The MixRoute OpenAI-compatible API does not return financial budget data.
-The balance is fetched from MixRoute's One API admin panel and requires an
-**admin access token** and your **user ID**. To set it up:
+The balance is fetched from MixRoute's `GET /api/user/self` endpoint using a
+**system access key**, an officially supported credential you generate yourself.
+To set it up:
 
 1. Log into [api.mixroute.ai](https://api.mixroute.ai) in your browser
-2. Open DevTools → Application → Local Storage → copy the `access_token` value
-3. Open DevTools → Application → Local Storage → copy the `uid` value (your user ID)
-4. Add both to your auth.json entry:
+2. Open **Settings → System access key** and generate a key — it is shown **once**
+   at generation time, so copy it immediately
+3. Add it to your auth.json entry:
 
 ```json
 {
   "mixroute": {
     "type": "api_key",
     "key": "sk-...",
-    "adminToken": "your-access-token",
-    "userId": 1234
+    "systemAccessKey": "your-system-access-key"
   }
 }
 ```
 
+**Security:** the system access key grants the same access as signing in to your
+account — not just read access to the balance. Store it only in your local
+`auth.json`, and replace or disable it from **Settings → System access key** if
+you stop using this extension or suspect the key was exposed.
+
 Restart pi and select a MixRoute model. The balance appears in the footer.
-If the credentials are missing or the API call fails, nothing is shown.
+If the key is missing or the API call fails, nothing is shown.
 Use `/mixroute-budget` for the full breakdown (balance + rate-limit usage).
 
 The colour thresholds are configurable via a `budgetThresholds` object under
