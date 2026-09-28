@@ -27,15 +27,37 @@
  *   }
  *
  * When these are present the extension shows the remaining balance in the
- * footer, colour-coded:
+ * footer, colour-coded (defaults; see budgetThresholds below):
  *   🟢 green   ≥ $40 remaining
  *   🟠 orange  $20–$40 remaining
  *   🔴 red     < $20 remaining
+ *
+ * The colour thresholds are user-configurable in settings.json under the
+ * "mixroute" key:
+ *
+ *   "mixroute": {
+ *     "budgetThresholds": { "green": 100, "amber": 25 }
+ *   }
+ *
+ * "green" is the balance (USD) at or above which the indicator is green;
+ * "amber" is the balance at or above which it is orange (red below). Both
+ * keys are optional; either falls back to its default. Invalid values are
+ * ignored. A trusted project's .pi/settings.json overrides the user-level
+ * settings, and the env vars MIXROUTE_BUDGET_GREEN / MIXROUTE_BUDGET_AMBER
+ * override both (values must be finite, non-negative USD amounts).
+ * Thresholds are re-read at each session start.
  */
 
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type ExtensionAPI, getAgentDir, type ModelRegistry, type ThemeColor } from "@earendil-works/pi-coding-agent";
+import {
+    type ExtensionAPI,
+    type ExtensionContext,
+    getAgentDir,
+    type ModelRegistry,
+    SettingsManager,
+    type ThemeColor,
+} from "@earendil-works/pi-coding-agent";
 import { type LoadMixRouteModelsResult, loadMixRouteModels, readMixRouteModelsCache } from "./model-loader.ts";
 import { filterUnsupportedMixRouteModels } from "./model-policy.ts";
 import { MIXROUTE_MODELS } from "./models.generated.ts";
@@ -56,9 +78,83 @@ import { createMixRouteProviderConfig, PROVIDER_NAME } from "./provider-config.t
 const STATUS_KEY = "mixroute-budget";
 const QUOTA_PER_UNIT = 500_000; // from /api/status → quota_per_unit
 
-// Colour thresholds in USD
-const GREEN_THRESHOLD = 40; // > $40  → green
-const AMBER_THRESHOLD = 20; // > $20  → amber; ≤ $20  → red
+// Default colour thresholds in USD
+const DEFAULT_GREEN_THRESHOLD = 40; // ≥ $40  → green
+const DEFAULT_AMBER_THRESHOLD = 20; // ≥ $20  → amber; < $20  → red
+
+/** Colour thresholds (USD): green ≥ `green` > amber ≥ `amber` > red. */
+type BudgetThresholds = { green: number; amber: number };
+
+/**
+ * Parse a threshold value: must be a finite, non-negative number.
+ * Returns undefined for anything else.
+ */
+function parseThreshold(value: unknown): number | undefined {
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return undefined;
+    return value;
+}
+
+/** Parse a threshold from an environment variable value. */
+function parseThresholdEnv(raw: string | undefined): number | undefined {
+    if (raw === undefined || raw.trim() === "") return undefined;
+    return parseThreshold(Number(raw));
+}
+
+/**
+ * Normalize user-supplied thresholds so that green ≥ amber (swapping when
+ * inverted). Returns null when neither value is valid.
+ */
+function normalizeThresholds(green: number | undefined, amber: number | undefined): BudgetThresholds | null {
+    if (green === undefined && amber === undefined) return null;
+    const g = green ?? DEFAULT_GREEN_THRESHOLD;
+    const a = amber ?? DEFAULT_AMBER_THRESHOLD;
+    return g >= a ? { green: g, amber: a } : { green: a, amber: g };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Extract the raw "mixroute"."budgetThresholds" object from a settings object. */
+function rawThresholdsFromSettings(settings: unknown): Record<string, unknown> | undefined {
+    if (!isRecord(settings)) return undefined;
+    const entry = settings.mixroute;
+    if (!isRecord(entry)) return undefined;
+    const thresholds = entry.budgetThresholds;
+    return isRecord(thresholds) ? thresholds : undefined;
+}
+
+function normalizeFromSettings(settings: unknown): BudgetThresholds | null {
+    const raw = rawThresholdsFromSettings(settings);
+    return normalizeThresholds(parseThreshold(raw?.green), parseThreshold(raw?.amber));
+}
+
+/**
+ * Resolve the colour thresholds. Precedence: environment variables
+ * (MIXROUTE_BUDGET_GREEN / MIXROUTE_BUDGET_AMBER), then the "mixroute" →
+ * "budgetThresholds" object in the trusted project's .pi/settings.json, then
+ * the same key in the user-level settings.json, then the defaults.
+ */
+function resolveThresholds(ctx: Pick<ExtensionContext, "cwd" | "isProjectTrusted">): BudgetThresholds {
+    const env = normalizeThresholds(
+        parseThresholdEnv(process.env.MIXROUTE_BUDGET_GREEN),
+        parseThresholdEnv(process.env.MIXROUTE_BUDGET_AMBER),
+    );
+    if (env) return env;
+    try {
+        const projectTrusted = ctx.isProjectTrusted();
+        const settingsManager = SettingsManager.create(ctx.cwd, getAgentDir(), { projectTrusted });
+        if (projectTrusted) {
+            const fromProject = normalizeFromSettings(settingsManager.getProjectSettings());
+            if (fromProject) return fromProject;
+        }
+        const fromGlobal = normalizeFromSettings(settingsManager.getGlobalSettings());
+        if (fromGlobal) return fromGlobal;
+    } catch {
+        // Unreadable settings fall back to the defaults.
+    }
+    return { green: DEFAULT_GREEN_THRESHOLD, amber: DEFAULT_AMBER_THRESHOLD };
+}
 
 // Per-response rate-limit tokens (secondary, shown in /mixroute-budget)
 let rlTokensRemaining: number | null = null;
@@ -82,6 +178,11 @@ function compact(n: number): string {
  * Returns { adminToken, userId } or null if either is missing.
  */
 type AdminCredentials = { adminToken: string; userId: number };
+
+/**
+ * Read admin credentials from the extension's auth.json entry.
+ * Returns { adminToken, userId } or null if either is missing or invalid.
+ */
 async function readAdminCredentials(): Promise<AdminCredentials | null> {
     try {
         const authPath = join(getAgentDir(), "auth.json");
@@ -170,10 +271,10 @@ export default async function (pi: ExtensionAPI) {
     let startupRefreshTriggered = false;
     let mixrouteActive = false;
     let adminBalance: number | null = null; // USD, or null if unavailable
-    let credentials: AdminCredentials | null = null;
+    let thresholds: BudgetThresholds = { green: DEFAULT_GREEN_THRESHOLD, amber: DEFAULT_AMBER_THRESHOLD };
 
     // Read admin credentials once at startup (auth.json rarely changes).
-    credentials = await readAdminCredentials();
+    const credentials = await readAdminCredentials();
 
     /** Re-fetch the admin balance and update the status bar. */
     async function refreshAdminBalance(ctx: {
@@ -206,18 +307,20 @@ export default async function (pi: ExtensionAPI) {
             return;
         }
         // ANSI 256-color codes: green (28), amber/orange (214), red (196)
-        const ansiColor = adminBalance >= GREEN_THRESHOLD ? 28 : adminBalance >= AMBER_THRESHOLD ? 214 : 196;
+        const ansiColor = adminBalance >= thresholds.green ? 28 : adminBalance >= thresholds.amber ? 214 : 196;
         const label = `$${adminBalance.toFixed(2)}`;
         // Use raw ANSI escape sequence for theme-independent colors
         ctx.ui.setStatus(STATUS_KEY, `\x1b[38;5;${ansiColor}m◉ ${label}\x1b[0m`);
     }
 
-    // Session start: reset state, refresh model catalog in background.
+    // Session start: reset state, resolve budget thresholds from settings,
+    // refresh model catalog in background.
     pi.on("session_start", (_event, ctx) => {
         mixrouteActive = false;
         adminBalance = null;
         rlTokensRemaining = null;
         rlTokensLimit = null;
+        thresholds = resolveThresholds(ctx);
         ctx.ui.setStatus(STATUS_KEY, undefined);
 
         if (startupRefreshTriggered || process.env.PI_OFFLINE === "1") return;

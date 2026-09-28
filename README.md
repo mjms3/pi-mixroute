@@ -56,7 +56,7 @@ precedence for models they define.
 ## Budget tracking (optional)
 
 When you select a MixRoute model, the extension shows your remaining account
-balance in pi's footer, colour-coded:
+balance in pi's footer, colour-coded (default thresholds):
 
 | Balance        | Colour |
 |----------------|--------|
@@ -87,6 +87,26 @@ The balance is fetched from MixRoute's One API admin panel and requires an
 Restart pi and select a MixRoute model. The balance appears in the footer.
 If the credentials are missing or the API call fails, nothing is shown.
 Use `/mixroute-budget` for the full breakdown (balance + rate-limit usage).
+
+The colour thresholds are configurable via a `budgetThresholds` object under
+the `mixroute` key in `~/.pi/agent/settings.json` — `green` is the balance
+(USD) at or above which the indicator is green, `amber` the balance at or
+above which it is orange (below `amber` it is red). Both keys are optional:
+
+```json
+{
+  "mixroute": {
+    "budgetThresholds": { "green": 100, "amber": 25 }
+  }
+}
+```
+
+A trusted project's `.pi/settings.json` overrides the user-level value, and
+the environment variables `MIXROUTE_BUDGET_GREEN` and `MIXROUTE_BUDGET_AMBER`
+override both. Invalid values (non-numeric or negative) are ignored; an
+inverted pair is normalized so green stays at or above amber. Both fall back
+to the defaults ($40 / $20) when not configured. Thresholds are re-read at
+each session start.
 
 ## Catalog discovery and offline behavior
 
