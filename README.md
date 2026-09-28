@@ -93,11 +93,6 @@ Restart pi and select a MixRoute model. The balance appears in the footer.
 If the key is missing or the API call fails, nothing is shown.
 Use `/mixroute-budget` for the full breakdown (balance + rate-limit usage).
 
-Existing configs that copied the browser's session `access_token` and `uid` from
-Local Storage (the `adminToken` + `userId` auth.json fields) keep working, but
-that token is an internal detail of MixRoute's web frontend and may change
-without notice — switch to a system access key when convenient.
-
 The colour thresholds are configurable via a `budgetThresholds` object under
 the `mixroute` key in `~/.pi/agent/settings.json` — `green` is the balance
 (USD) at or above which the indicator is green, `amber` the balance at or

@@ -351,3 +351,50 @@ test("budget status refreshes after each provider response", async (t) => {
     assert.match(budgetStatus(h)!, /38;5;28/);
     await flushAsync(); // allow the fire-and-forget balance refresh to settle
 });
+
+test("deprecated adminToken config warns once per session and still shows the balance", async (t) => {
+    mockAdminBalance(t, 30);
+    const h = await harness(t, true, true, {
+        authJson: JSON.stringify({ mixroute: { type: "api_key", key: "k", adminToken: "tok", userId: 7 } }),
+    });
+    await h.start();
+    await h.start(); // warned once per process, not per session_start
+    const deprecationWarnings = h.notifications.filter((n) => n.level === "warning" && /deprecated/.test(n.message));
+    assert.equal(deprecationWarnings.length, 1);
+    assert.match(deprecationWarnings[0]!.message, /removed in a future release/);
+    assert.match(deprecationWarnings[0]!.message, /system access key/i);
+    await h.selectModel();
+    assert.match(budgetStatus(h)!, /\$30\.00/); // legacy config still works
+});
+
+test("deprecated adminToken config warns on stderr when headless", async (t) => {
+    mockAdminBalance(t, 30);
+    const h = await harness(t, true, false, {
+        authJson: JSON.stringify({ mixroute: { type: "api_key", key: "k", adminToken: "tok", userId: 7 } }),
+    });
+    await h.start();
+    assert.equal(h.notifications.length, 0);
+    assert.match(String(h.warnings[0]), /deprecated/);
+});
+
+test("system access key config does not warn and needs no userId header", async (t) => {
+    const requests: { url: string; headers: Headers }[] = [];
+    t.mock.method(globalThis, "fetch", async (input: unknown, init?: RequestInit): Promise<Response> => {
+        const url = String(input);
+        if (url === "https://api.mixroute.ai/api/user/self") {
+            requests.push({ url, headers: new Headers(init?.headers) });
+            return Response.json({ success: true, data: { quota: 30 * 500_000 } });
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+    });
+    const h = await harness(t, true, true, {
+        authJson: JSON.stringify({ mixroute: { type: "api_key", key: "k", systemAccessKey: "sys-key" } }),
+    });
+    await h.start();
+    assert.equal(h.notifications.filter((n) => n.level === "warning").length, 0);
+    await h.selectModel();
+    assert.match(budgetStatus(h)!, /\$30\.00/);
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0]!.headers.get("authorization"), "Bearer sys-key");
+    assert.equal(requests[0]!.headers.get("New-Api-User"), null);
+});

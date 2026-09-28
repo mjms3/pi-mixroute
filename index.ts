@@ -26,8 +26,10 @@
  *     "systemAccessKey": "your-system-access-key"
  *   }
  *
- * (Legacy configs that stored the browser session token as "adminToken"
- * together with the numeric "userId" keep working.)
+ * (The deprecated "adminToken" browser session token, with its numeric
+ * "userId", still works for existing configs but will be removed in a future
+ * release; users are warned at session start to switch to a system access
+ * key.)
  *
  * When the key is present the extension shows the remaining balance in the
  * footer, colour-coded (defaults; see budgetThresholds below):
@@ -72,8 +74,9 @@ import { createMixRouteProviderConfig, PROVIDER_NAME } from "./provider-config.t
 //
 // Authenticate with a system access key (Settings → System access key on
 // https://api.mixroute.ai), stored alongside your API key in auth.json as
-// "systemAccessKey".  Legacy "adminToken" (browser session token) entries
-// with a numeric "userId" are still accepted.
+// "systemAccessKey".  The "adminToken" browser session token with a numeric
+// "userId" is DEPRECATED (removal planned); a session-start warning asks
+// users still on it to switch.
 //
 //   GET /api/user/self  →  { quota, used_quota, ... }
 //
@@ -181,12 +184,18 @@ function compact(n: number): string {
  * Read budget credentials from auth.json.
  * Returns { key, userId? } or null if no key is configured.
  */
-type BudgetCredentials = { key: string; userId?: number };
+type BudgetCredentials = {
+    key: string;
+    /** Only needed by the deprecated session-token flow. */
+    userId?: number;
+    /** True when the deprecated "adminToken" browser session token is used. */
+    legacy: boolean;
+};
 
 /**
  * Read budget credentials from the extension's auth.json entry.
- * Returns { key, userId? } or null if no key is configured or the entry is
- * invalid.
+ * Returns { key, userId?, legacy } or null if no key is configured or the
+ * entry is invalid.
  */
 async function readBudgetCredentials(): Promise<BudgetCredentials | null> {
     try {
@@ -195,12 +204,14 @@ async function readBudgetCredentials(): Promise<BudgetCredentials | null> {
         const auth = JSON.parse(raw) as Record<string, unknown>;
         const entry = auth[PROVIDER_NAME] as Record<string, unknown> | undefined;
         if (!entry) return null;
-        // Prefer the officially supported system access key; fall back to the
-        // legacy "adminToken" (browser session token) for existing configs.
-        const key = entry.systemAccessKey ?? entry.adminToken;
-        if (typeof key !== "string" || !key.trim()) return null;
-        const credentials: BudgetCredentials = { key: key.trim() };
-        // userId is only needed by the legacy session-token flow.
+        // Prefer the officially supported system access key. The "adminToken"
+        // browser session token is DEPRECATED and will be removed in a future
+        // release; it remains only as a fallback for existing configs.
+        const systemKey = typeof entry.systemAccessKey === "string" ? entry.systemAccessKey.trim() : "";
+        const adminToken = typeof entry.adminToken === "string" ? entry.adminToken.trim() : "";
+        const key = systemKey || adminToken;
+        if (!key) return null;
+        const credentials: BudgetCredentials = { key, legacy: !systemKey };
         const userId = entry.userId;
         if (typeof userId === "number" && Number.isSafeInteger(userId) && userId > 0) credentials.userId = userId;
         return credentials;
@@ -219,8 +230,8 @@ async function fetchBudgetBalance(credentials: BudgetCredentials, signal?: Abort
             authorization: `Bearer ${credentials.key}`,
             accept: "application/json",
         };
-        // Legacy session tokens also need the numeric user ID header; system
-        // access keys identify the user on their own.
+        // Deprecated session tokens also need the numeric user ID header;
+        // system access keys identify the user on their own.
         if (credentials.userId !== undefined) headers["New-Api-User"] = String(credentials.userId);
         const res = await fetch("https://api.mixroute.ai/api/user/self", { headers, signal });
         if (!res.ok) return null;
@@ -323,7 +334,9 @@ export default async function (pi: ExtensionAPI) {
     }
 
     // Session start: reset state, resolve budget thresholds from settings,
-    // refresh model catalog in background.
+    // warn about deprecated budget credentials, refresh model catalog in
+    // background.
+    let legacyWarningShown = false;
     pi.on("session_start", (_event, ctx) => {
         mixrouteActive = false;
         budgetBalance = null;
@@ -331,6 +344,15 @@ export default async function (pi: ExtensionAPI) {
         rlTokensLimit = null;
         thresholds = resolveThresholds(ctx);
         ctx.ui.setStatus(STATUS_KEY, undefined);
+
+        if (credentials?.legacy && !legacyWarningShown) {
+            legacyWarningShown = true;
+            const message =
+                "MixRoute: the adminToken/userId auth.json config (browser session token) is deprecated and will be removed in a future release. " +
+                "Generate a system access key under Settings → System access key on the MixRoute website and set it as systemAccessKey in auth.json.";
+            if (ctx.hasUI) ctx.ui.notify(message, "warning");
+            else console.warn(`[mixroute] ${message}`);
+        }
 
         if (startupRefreshTriggered || process.env.PI_OFFLINE === "1") return;
         startupRefreshTriggered = true;
